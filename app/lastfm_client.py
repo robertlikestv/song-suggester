@@ -1,21 +1,18 @@
-"""Client for accessing Last.fm API data.
+"""
+Client for accessing Last.fm API data.
 
 Provides an integration wrapper around PyLast to handle API authentication,
 fetching artist tags/genres, and querying track recommendations.
 """
 
-import logging
-from typing import Optional
 import pylast
-from app.config import settings
-
-logger = logging.getLogger(__name__)
+from app.config import Settings
 
 
 class LastfmService:
     """Last.fm API Client wrapper."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings) -> None:
         """Initializes connection to Last.fm API network."""
         self.network = pylast.LastFMNetwork(
             api_key=settings.LASTFM_API_KEY,
@@ -39,10 +36,9 @@ class LastfmService:
                 tags.append(tag.item.get_name().title())
             return tags
         except Exception as err:
-            logger.error("Failed to fetch genres for artist '%s': %s", artist, err)
             return []
 
-    def get_similar_track(self, artist: str, title: str) -> Optional[tuple[str, str]]:
+    def get_similar_track(self, artist: str, title: str) -> tuple[str, str] | None:
         """Finds the top similar track recommendation for a given song.
 
         Args:
@@ -56,7 +52,6 @@ class LastfmService:
             similar_items = self.network.get_track(artist, title).get_similar(limit=1)
 
             if not similar_items:
-                logger.warning("No similar tracks found for '%s - %s'", artist, title)
                 return None
 
             top_match = similar_items[0].item
@@ -65,13 +60,11 @@ class LastfmService:
 
             return (similar_artist, similar_title)
         except Exception as err:
-            logger.error("Failed to fetch similar track for '%s - %s': %s", artist, title, err)
             return None
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    logger.info("Initializing LastfmService...")
-    service = LastfmService()
+    settings = Settings()
+    service = LastfmService(settings)
     genres = service.get_artist_genres("Radiohead")
-    logger.info("Retrieved genres: %s", genres)
+    print(genres)

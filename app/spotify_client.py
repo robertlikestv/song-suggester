@@ -1,4 +1,5 @@
-"""Client for accessing Spotify Web API data.
+"""
+Client for accessing Spotify Web API data.
 
 Provides an integration wrapper around Spotipy to handle OAuth authentication
 and fetch user top tracks and associated metadata.
@@ -8,15 +9,13 @@ import json
 import logging
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from app.config import settings
-
-logger = logging.getLogger(__name__)
+from app.config import Settings
 
 
 class SpotifyClient:
     """Creates a Spotify API Client wrapper."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings) -> None:
         """Authorizes connection to Spotify API via OAuth 2.0."""
         scope = "user-top-read"
 
@@ -29,12 +28,9 @@ class SpotifyClient:
             )
         )
 
-    def get_top_tracks(
-        self, 
-        limit: int = 20, 
-        offset: int = 0, 
-        time_range: str = "medium_term"
-    ) -> dict:
+
+    def get_top_tracks(self, limit: int = 20, offset: int = 0, 
+                       time_range: str = "medium_term") -> dict:
         """Fetches the user's top played tracks payload from Spotify.
 
         Args:
@@ -47,44 +43,28 @@ class SpotifyClient:
         """
         return self.sp.current_user_top_tracks(limit=limit, offset=offset, time_range=time_range)
 
+
     def extract_artists(self, top_tracks_payload: dict) -> list[str]:
-        """Extracts primary artist names from a top tracks API payload.
-
-        Args:
-            top_tracks_payload: Raw payload dictionary returned by `get_top_tracks`.
-
-        Returns:
-            A list of primary artist names.
-        """
+        """Extracts primary artist names from a top tracks API payload."""
         artists = []
         for item in top_tracks_payload.get("items", []):
             if item.get("artists"):
                 artists.append(item["artists"][0]["name"])
         return artists
 
+
     def extract_titles(self, top_tracks_payload: dict) -> list[str]:
-        """Extracts track titles from a top tracks API payload.
-
-        Args:
-            top_tracks_payload: Raw payload dictionary returned by `get_top_tracks`.
-
-        Returns:
-            A list of track titles.
-        """
+        """Extracts track titles from a top tracks API payload."""
         return [item["name"] for item in top_tracks_payload.get("items", [])]
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    logger.info("Initializing SpotifyClient connection...")
-
-    client = SpotifyClient()
-    tracks_data = client.get_top_tracks(limit=5)
+    settings = Settings()
+    client = SpotifyClient(settings)
+    tracks_data = client.get_top_tracks(time_range="medium_term")
 
     # Local inspection output
     for idx, (artist, title) in enumerate(
         zip(client.extract_artists(tracks_data), client.extract_titles(tracks_data)), 1
     ):
         print(f"{idx}. {artist} - {title}")
-
-    logger.info("Successfully retrieved top tracks!")
