@@ -4,7 +4,7 @@ Application Config Module.
 Loads and validates environment variables needed for Spotify and Last.fm
 API wrappers using Pydantic Settings.
 """
-from pydantic import SecretStr
+from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -23,3 +23,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

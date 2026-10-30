@@ -1,24 +1,22 @@
 """
 Client for accessing Last.fm API data.
 """
-
 import pylast
-import json
 
-# local
 from app.config import Settings
-from app.models import Track
+from app.schemas import Track
 
 
 class LastfmClient:
     """Last.fm API Client wrapper."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, api_key = str, api_secret = str) -> None:
         """Initializes connection to Last.fm API network."""
         self.network = pylast.LastFMNetwork(
-            api_key=settings.LASTFM_API_KEY,
-            api_secret=settings.LASTFM_API_SECRET,
+            api_key=api_key,
+            api_secret=api_secret,
         )
+
 
     def get_artist_genres(self, artist: str, limit: int = 3) -> list[str]:
         """Gets top genres/tags associated with an artist.
@@ -41,8 +39,14 @@ class LastfmClient:
         except Exception:
             return []
 
-    def get_similar_tracks(self, artist: str, title: str, 
-                           limit=10) -> list[Track] | None:
+
+    def get_similar_tracks(
+        self, 
+        artist: str, 
+        title: str, 
+        limit=10,
+        max_listeners: int = 500_000
+    ) -> list[Track] | None:
         """Finds the top similar track recommendation for a given song.
 
         Args:
@@ -54,23 +58,56 @@ class LastfmClient:
             A tuple of (similar_artist, similar_title) if found, or None 
                 if no match exists.
         """
+        # Will be actively filtering out poor results, so need to query
+        # for a few extra 
+        fetch_buffer = max(limit * 3, 50)
         try:
-            similar_items = self.network.get_track(artist, title).get_similar(limit)
+            seed_track = self.network.get_track(artist, title)
+            similar_items = seed_track.get_similar(limit=fetch_buffer)
+        except pylast.PyLastError:
+            return []
+        
+        found_tracks: list[Track] = []
+        seen_tracks: set[str] = set()
 
-            if not similar_items:
-                return None
+        # Want to avoid having the initial song be recommended
+        seed_key = (
+            f"{artist.lower().strip()} - {title.lower().strip()}"
+        )
+        seen_tracks.add(seed_key)
 
-            tracks = []
-            for item in similar_items:
-                found_track = item.item
-                similar_artist = found_track.get_artist().get_name()
-                similar_title = found_track.get_title()
+        for item in similar_items:
+            found_track = item.item
+            found_artist = found_track.get_artist().get_name()
+            found_title = found_track.get_title()
+            track_key = (
+                f"{found_artist.lower().strip()} - {found_title.lower().strip()}"
+            )
 
-                new_track = Track(similar_title, similar_artist)
-                tracks.append(new_track)
-            return tracks
-        except KeyError:
-            return None
+            if track_key in seen_tracks:
+                continue
+
+            try:
+                listener_count = found_track.get_listener_count()
+            except pylast.PyLastError:
+                continue
+
+            # Want to avoid overly popular songs
+            if listener_count > max_listeners:
+                continue
+
+            new_track = Track(
+                title=found_title, 
+                artist=found_artist,
+                listeners=listener_count,
+                playcount=found_track.get_playcount()
+            )
+            found_tracks.append(new_track)
+
+            if len(found_tracks) == limit:
+                break
+
+        return found_tracks
 
 
 if __name__ == "__main__":
